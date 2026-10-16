@@ -25,7 +25,7 @@ docker compose up --build -d
 docker compose down
 ```
 
-Остановка с удалением сохранённых данных БД (осторожно: удалит коллекцию):
+Остановка с удалением сохранённых данных БД:
 
 ```bash
 docker compose down -v
