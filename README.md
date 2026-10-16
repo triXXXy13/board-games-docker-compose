@@ -52,4 +52,4 @@ docker compose logs -f backend
 docker compose logs -f web-service
 ```
 
-Все четыре сервиса запускаются в общей сети Docker Compose. База данных и backend имеют healthcheck; frontend ждёт готовности backend, а backend — готовности БД и web-service. Пароль БД в учебном проекте демонстрационный; для реального развертывания используйте `.env` и секреты.
+Все четыре сервиса запускаются в общей сети Docker Compose. База данных и backend имеют healthcheck; frontend ждёт готовности backend, а backend — готовности БД и web-service.
