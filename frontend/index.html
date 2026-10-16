@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Настольные игры клуба</title>
+  <style>
+    :root { color-scheme: light; --ink:#202938; --muted:#64748b; --accent:#635bdb; --line:#e2e8f0; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Inter,Segoe UI,Arial,sans-serif; background:#f4f6fb; color:var(--ink); }
+    header { background:linear-gradient(120deg,#27235c,#635bdb); color:white; padding:34px 20px; }
+    header .wrap, main { max-width:1050px; margin:0 auto; }
+    h1 { margin:0 0 8px; font-size:clamp(1.7rem,4vw,2.5rem); }
+    header p { margin:0; opacity:.88; }
+    main { padding:24px 18px 50px; }
+    .panel { background:white; border:1px solid var(--line); border-radius:16px; padding:20px; margin-bottom:20px; box-shadow:0 5px 18px #1823440a; }
+    h2 { margin:0 0 16px; font-size:1.25rem; }
+    .filters { display:flex; flex-wrap:wrap; gap:14px; align-items:end; }
+    label { display:grid; gap:6px; font-size:.9rem; color:#475569; }
+    input { width:150px; padding:10px 12px; border:1px solid #cbd5e1; border-radius:9px; font:inherit; }
+    button { border:0; border-radius:9px; padding:10px 14px; font:inherit; font-weight:650; cursor:pointer; background:var(--accent); color:white; }
+    button:hover { filter:brightness(.94); }
+    button.secondary { background:#e9e8ff; color:#3f3a9c; }
+    button.danger { background:#fee2e2; color:#991b1b; }
+    .status { color:var(--muted); font-size:.92rem; margin:12px 0 0; min-height:1.2em; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; }
+    .game { border:1px solid var(--line); border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:10px; background:#fff; }
+    .game h3 { margin:0; font-size:1.1rem; }
+    .meta { color:#514bb5; font-size:.88rem; font-weight:650; }
+    .desc { color:#64748b; line-height:1.45; margin:0; flex:1; }
+    .game button { align-self:flex-start; }
+    .empty { color:var(--muted); padding:12px 0; }
+    footer { text-align:center; padding:20px; color:#64748b; font-size:.85rem; }
+    @media(max-width:520px) { input { width:100%; } .filters label { flex:1 1 100%; } .filters button { width:100%; } }
+  </style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>🎲 Настольные игры клуба</h1>
+    <p>Подберите игру по составу компании и длительности партии — сохраните её в коллекцию клуба.</p>
+  </div>
+</header>
+<main>
+  <section class="panel">
+    <h2>Поиск игр</h2>
+    <div class="filters">
+      <label>Количество игроков
+        <input id="players" type="number" min="1" max="20" value="4">
+      </label>
+      <label>Максимум минут
+        <input id="minutes" type="number" min="1" max="600" value="60">
+      </label>
+      <button id="searchBtn">Найти игры</button>
+    </div>
+    <p class="status" id="searchStatus" aria-live="polite"></p>
+    <div class="grid" id="results"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Коллекция клуба</h2>
+    <button class="secondary" id="refreshBtn">Обновить коллекцию</button>
+    <p class="status" id="collectionStatus" aria-live="polite"></p>
+    <div class="grid" id="collection"></div>
+  </section>
+</main>
+<footer>Лабораторный практикум · Docker Compose · Вариант №30</footer>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const esc = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+  }[ch]));
+
+  function gameCard(game, saved = false) {
+    const action = saved
+      ? `<button class="danger" data-delete="${esc(game.id)}">Удалить из коллекции</button>`
+      : `<button data-save="${esc(game.id)}">Сохранить в коллекцию</button>`;
+    return `<article class="game">
+      <h3>${esc(game.title)}</h3>
+      <div class="meta">${esc(game.genre)} · ${esc(game.players_min)}–${esc(game.players_max)} игроков · ${esc(game.duration_minutes)} мин.</div>
+      <p class="desc">${esc(game.description)}</p>${action}
+    </article>`;
+  }
+
+  async function searchGames() {
+    const players = Number($('players').value);
+    const minutes = Number($('minutes').value);
+    $('searchStatus').textContent = 'Ищем подходящие игры…';
+    $('results').innerHTML = '';
+    try {
+      const response = await fetch(`/api/games?players=${encodeURIComponent(players)}&max_minutes=${encodeURIComponent(minutes)}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Ошибка поиска');
+      $('results').innerHTML = data.games.map(game => gameCard(game)).join('');
+      $('searchStatus').textContent = `Найдено игр: ${data.count}`;
+      if (!data.count) $('results').innerHTML = '<p class="empty">По заданным параметрам игры не найдены. Попробуйте увеличить время партии.</p>';
+    } catch (error) {
+      $('searchStatus').textContent = `Ошибка: ${error.message}`;
+    }
+  }
+
+  async function loadCollection() {
+    $('collectionStatus').textContent = 'Загружаем коллекцию…';
+    try {
+      const response = await fetch('/api/collection');
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Ошибка загрузки');
+      $('collection').innerHTML = data.map(game => gameCard(game, true)).join('');
+      $('collectionStatus').textContent = `В коллекции игр: ${data.length}`;
+      if (!data.length) $('collection').innerHTML = '<p class="empty">Коллекция пока пуста. Найдите игру и сохраните её.</p>';
+    } catch (error) {
+      $('collectionStatus').textContent = `Ошибка: ${error.message}`;
+    }
+  }
+
+  $('searchBtn').addEventListener('click', searchGames);
+  $('refreshBtn').addEventListener('click', loadCollection);
+
+  document.addEventListener('click', async (event) => {
+    const saveId = event.target.dataset.save;
+    const deleteId = event.target.dataset.delete;
+    if (!saveId && !deleteId) return;
+    const button = event.target;
+    button.disabled = true;
+    try {
+      let response;
+      if (saveId) {
+        const card = button.closest('.game');
+        const title = card.querySelector('h3').textContent;
+        // Сохраняем объект игры, соответствующий карточке поиска.
+        const playersText = card.querySelector('.meta').textContent;
+        const match = playersText.match(/(\d+)–(\d+) игроков · (\d+) мин\./);
+        const genre = playersText.split(' · ')[0];
+        const description = card.querySelector('.desc').textContent;
+        response = await fetch('/api/collection', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            id:saveId, title, genre, description,
+            players_min:Number(match?.[1]), players_max:Number(match?.[2]),
+            duration_minutes:Number(match?.[3])
+          })
+        });
+      } else {
+        response = await fetch(`/api/collection/${encodeURIComponent(deleteId)}`, {method:'DELETE'});
+      }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Операция не выполнена');
+      $('collectionStatus').textContent = data.message || 'Готово';
+      await loadCollection();
+    } catch (error) {
+      $('collectionStatus').textContent = `Ошибка: ${error.message}`;
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  searchGames();
+  loadCollection();
+</script>
+</body>
+</html>
